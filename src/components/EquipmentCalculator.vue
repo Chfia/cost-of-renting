@@ -1,15 +1,12 @@
 <template>
   <div class="equipment-calculator">
-    <div v-for="(section, index) in equipmentSections" :key="index">
+    <div v-for="(section, sectionIndex) in equipmentSections" :key="sectionIndex">
       <div class="question">
         <h2>{{ section.name }}</h2>
         <div>
-          <div v-for="item in section.items" :key="item.id">
-            <button
-            class="equipment-button"
-  @click="selectEquipment(index, item.name)"
-  :class="{ 'selected': selectedEquipment[index] === item.name }"
->
+          <div class="equipment" v-for="(item, itemIndex) in section.items" :key="itemIndex">
+            <button class="equipment-button" @click="selectEquipment(sectionIndex, item.name)"
+              :class="{ 'selected': selectedEquipment[sectionIndex] === item.name }">
               <div class="equipment-option">
                 <div class="equipment-image">
                   <img :src="item.imgHref" :alt="item.name" />
@@ -22,20 +19,42 @@
                 </div>
               </div>
             </button>
+
+            <button class="equipment-button__desktop" @click="selectEquipment(sectionIndex, item.name)"
+              :class="{ 'selected': selectedEquipment[sectionIndex] === item.name }">
+
+              <div class="equipment-option__desktop">
+                <div class="equipment-name__desktop">
+                  <strong>{{ item.name }}</strong>
+                </div>
+                <div class="equipment-image__desktop">
+                  <img :src="item.imgHref" :alt="item.name" />
+                </div>
+                <div class="equipment-info__desktop">
+                  <div class="equipment-description__desktop">{{ item.description }}</div>
+                </div>
+              </div>
+            </button>
           </div>
         </div>
       </div>
-      <div v-if="index < equipmentSections.length - 1" class="question-divider"></div>
+      <div v-if="sectionIndex < equipmentSections.length - 1" class="question-divider"></div>
     </div>
     <div>
-      <button @click="showSummary = true">Oblicz koszt</button>
-      <div v-if="showSummary" class="summary">
-        <h3>Podsumowanie</h3>
-        <p>Całkowity koszt wynajmu: {{ calculateCost() }} zł</p>
+      <button @click="calculateCost" :disabled="!allQuestionsAnswered">Oblicz koszt</button>
+      <div class="summary">
+        <p class="summary_name">{{ selectedEquipmentString }}</p>
+        <p class="missing-questions" v-if="!allQuestionsAnswered"
+          style="color: black; white-space: pre-line; text-align: left;">{{ missingQuestionsMessage }}</p>
+        <div class="line"></div>
+        <p class="summary_hours">Work hours: {{ totalWorkHours }}</p>
+        <p class="summary_total">Total: {{ showSummary ? totalCost + ' zł gross' : '-' }}</p>
       </div>
     </div>
   </div>
 </template>
+
+
 
 <script>
 import axios from 'axios';
@@ -47,65 +66,115 @@ export default {
       equipmentSections: [],
       selectedEquipment: {},
       showSummary: false,
-      dataJson: null
+      dataJson: null,
+      tooltipVisible: false,
     };
   },
+  computed: {
+    allQuestionsAnswered() {
+      return (
+        this.selectedEquipment[1] &&
+        this.selectedEquipment[2] &&
+        this.selectedEquipment[3]
+      );
+    },
+    selectedEquipmentString() {
+      return Object.values(this.selectedEquipment).join(' + ');
+    },
+    totalWorkHours() {
+      let totalHours = 0;
+      for (const sectionIndex in this.selectedEquipment) {
+        const itemId = this.selectedEquipment[sectionIndex];
+        const section = this.equipmentSections[sectionIndex];
+        const item = section.items.find((item) => item.id === itemId);
+        if (item) {
+          totalHours += this.calculateItemWorkHours(item);
+        }
+      }
+      return totalHours;
+    },
+    missingQuestionsMessage() {
+      const missingQuestions = [];
+      if (!this.selectedEquipment[1]) {
+        missingQuestions.push('Question 2 - Choose number of building sites');
+      }
+      if (!this.selectedEquipment[2]) {
+        missingQuestions.push('Question 3 - Choose speed of work');
+      }
+      if (!this.selectedEquipment[3]) {
+        missingQuestions.push('Question 4 - Choose level of used materials');
+      }
+      return ` ${missingQuestions.join('\n')}.`;
+    },
+  },
   mounted() {
-    axios.get(process.env.BASE_URL + 'data.json')
-    .then(response => {
-      this.dataJson = response.data;
-      this.equipmentSections = this.dataJson.filter(section => section.type === 'sectionDefinition')[0].items;
-    })
-    .catch(error => {
-      console.error('Error loading data:', error);
-    });
+    axios
+      .get(process.env.BASE_URL + 'data.json')
+      .then((response) => {
+        this.dataJson = response.data;
+        this.equipmentSections = this.dataJson.find(
+          (section) => section.type === 'sectionDefinition'
+        ).items;
+      })
+      .catch((error) => {
+        console.error('Error loading data:', error);
+      });
   },
   methods: {
     selectEquipment(sectionIndex, itemName) {
-  this.selectedEquipment[sectionIndex] = itemName;
-},
+      this.selectedEquipment[sectionIndex] = itemName;
+    },
 
     calculateCost() {
-      let totalCost = 0;
-      
-      for (const sectionType in this.selectedEquipment) {
-        const itemId = this.selectedEquipment[sectionType];
-        
-        const section = this.dataJson.find(section => section.type === 'sectionDefinition');
-        const item = section.items.find(item => item.id === itemId);
-        
-        if (item) {
-          totalCost += this.calculateItemCost(item);
+      if (this.allQuestionsAnswered) {
+        this.showSummary = true;
+        const dataJson = this.dataJson;
+        let totalPrice = 0;
+
+        for (const sectionIndex in this.selectedEquipment) {
+          const itemId = this.selectedEquipment[sectionIndex];
+          const section = dataJson.find((section) => section.type === 'sectionDefinition');
+          const item = section.items.find((item) => item.id === itemId);
+
+          if (item) {
+            totalPrice += item.operationsIfEnabled[0].number;
+          }
+        }
+
+        return totalPrice;
+      } else {
+        this.showSummary = false;
+        return 0;
+      }
+    },
+
+    calculateItemWorkHours(item) {
+      let workHours = 0;
+      if (Array.isArray(item.operationsIfEnabled)) {
+        for (const operation of item.operationsIfEnabled) {
+          if (operation.type === 'add') {
+            workHours += operation.number;
+          }
         }
       }
-      
-      return totalCost;
+      return workHours;
     },
-    calculateItemCost(item) {
-  let itemCost = 0;
-
-  if (Array.isArray(item.operationsIfEnabled)) {
-    for (const operation of item.operationsIfEnabled) {
-      if (operation.type === 'add') {
-        itemCost += operation.number;
-      } else if (operation.type === 'multiply') {
-        itemCost *= operation.number;
-      }
-    }
-  }
-
-  return itemCost;
-}
-
-  }
+  },
 };
 </script>
 
 
+
+
 <style scoped>
 .equipment-button.selected {
-  background-color: #00FF00;
+  background-color: #a4eba6;
 }
+
+.equipment-button__desktop.selected {
+  background-color: #a4eba6;
+}
+
 .equipment-button {
   width: 100%;
   padding: 0;
@@ -117,12 +186,17 @@ export default {
   transition: background-color 0.5s;
 }
 
+.equipment-button__desktop {
+  display: none;
+}
+
+
 .equipment-button:hover {
   background-color: #a4eba6;
 }
 
 .equipment-button.selected .equipment-option {
- /* to do */
+  /* to do */
 }
 
 .equipment-option {
@@ -131,6 +205,7 @@ export default {
   padding: 15px 20px;
   transition: background-color 0.3s;
 }
+
 
 .equipment-image {
   width: 40px;
@@ -145,6 +220,7 @@ export default {
   width: 100%;
   height: 100%;
   object-fit: cover;
+
 }
 
 .equipment-name {
@@ -158,18 +234,146 @@ export default {
   margin-bottom: 10px;
   color: white;
   padding: 50px;
+  z-index: 1;
 }
-@media (min-width: 768px) {
-  .question {
-    /* margin-bottom: 320px; */
-  }
-}
+
 
 .question-divider {
   height: 10px;
 }
 
 .summary {
-  /* Stylizacja podsumowania */
+  background-color: #f44336;
+  padding: 20px;
+  color: #ffffff;
+  margin-top: 10px;
+}
+
+.summary .summary_name {
+  font-size: 20px;
+}
+
+.summary .summary_hours {
+  font-size: 15px;
+  text-align: left;
+}
+
+.summary .summary_total {
+  font-size: 25px;
+  text-align: left;
+}
+
+.summary .line {
+  background-color: #ffffff;
+  width: 100%;
+  height: 2px;
+}
+
+@media (min-width: 768px) {
+
+  .equipment {
+    display: inline-block;
+
+  }
+
+  .equipment-button {
+    display: none;
+    cursor: pointer;
+  }
+
+  .equipment-button__desktop {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    border-radius: 50%;
+    padding: 4px;
+    color: white;
+    border: none;
+    background-color: #f44336;
+    transition: background-color 0.5s;
+    position: relative;
+    margin: 45px 2px 2px 15px;
+  }
+
+  .equipment-button__desktop.selected .equipment-description__desktop {
+    display: block;
+
+  }
+
+  .equipment-button__desktop .equipment-option__desktop {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .equipment-button__desktop .equipment-image__desktop {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    overflow: hidden;
+    position: relative;
+    transition: transform 0.3s ease;
+  }
+
+
+  .equipment-button__desktop .equipment-image__desktop img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .equipment-name__desktop {
+    text-align: center;
+    position: absolute;
+    top: -30px;
+    left: 0;
+    right: 0;
+    z-index: 999;
+
+  }
+
+  .equipment-button__desktop .equipment-option__desktop:hover .equipment-name__desktop {
+    display: block;
+  }
+
+  .equipment-button__desktop .equipment-description__desktop {
+    display: none;
+    width: 400px;
+    position: absolute;
+    background-color: #696868;
+    padding: 10px;
+    border-radius: 5px;
+    top: 95px;
+    left: 85%;
+    transform: translateX(-50%);
+    z-index: 99;
+  }
+
+  .equipment-button__desktop:hover .equipment-description__desktop {
+    display: block;
+  }
+
+  .equipment-button__desktop .equipment-description__desktop::before {
+    content: '';
+    position: absolute;
+    width: 0;
+    height: 0;
+    border-left: 10px solid transparent;
+    border-right: 10px solid transparent;
+    border-top: 10px solid #696868;
+    top: -9px;
+    left: 40%;
+    transform: translateX(-50%);
+    transform: rotate(180deg);
+  }
+
+  .equipment-button__desktop.selected .equipment-description__desktop::before {
+    display: none;
+  }
+
+  .equipment-button__desktop.selected .equipment-description__desktop {
+    display: none;
+  }
+
 }
 </style>
