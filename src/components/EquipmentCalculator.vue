@@ -5,8 +5,8 @@
         <h2>{{ section.name }}</h2>
         <div>
           <div class="equipment" v-for="(item, itemIndex) in section.items" :key="itemIndex">
-            <button class="equipment-button" @click="selectEquipment(sectionIndex, item.name)"
-              :class="{ 'selected': selectedEquipment[sectionIndex] === item.name }">
+            <button class="equipment-button" @click="selectEquipment(sectionIndex, item.name, section.selectionType)"
+              :class="{  'selected': selectedAnswers[sectionIndex].includes(item.name) }">
               <div class="equipment-option">
                 <div class="equipment-image">
                   <img :src="item.imgHref" :alt="item.name" />
@@ -20,8 +20,8 @@
               </div>
             </button>
 
-            <button class="equipment-button__desktop" @click="selectEquipment(sectionIndex, item.name)"
-              :class="{ 'selected': selectedEquipment[sectionIndex] === item.name }">
+            <button class="equipment-button__desktop" @click="selectEquipment(sectionIndex, item.name, section.selectionType)"
+              :class="{  'selected': selectedAnswers[sectionIndex].includes(item.name) }">
 
               <div class="equipment-option__desktop">
                 <div class="equipment-name__desktop">
@@ -41,14 +41,14 @@
       <div v-if="sectionIndex < equipmentSections.length - 1" class="question-divider"></div>
     </div>
     <div>
-      <button @click="calculateCost" :disabled="!allQuestionsAnswered">Oblicz koszt</button>
+      <button @click="calculateCost()" :disabled="!allQuestionsAnswered">Oblicz koszt</button>
       <div class="summary">
-        <p class="summary_name">{{ selectedEquipmentString }}</p>
+        <p class="summary_name">{{ selectedAnswersString }}</p>
         <p class="missing-questions" v-if="!allQuestionsAnswered"
           style="color: black; white-space: pre-line; text-align: left;">{{ missingQuestionsMessage }}</p>
         <div class="line"></div>
         <p class="summary_hours">Work hours: {{ totalWorkHours }}</p>
-        <p class="summary_total">Total: {{ showSummary ? totalCost + ' zł gross' : '-' }}</p>
+        <p class="summary_total">Total: {{ showSummary ? totalPrice + ' zł gross' : '-' }}</p>
       </div>
     </div>
   </div>
@@ -64,44 +64,49 @@ export default {
   data() {
     return {
       equipmentSections: [],
-      selectedEquipment: {},
+      selectedAnswers: {
+        0: [],
+        1: [],
+        2: [],
+        3: [],
+        4: [],
+      },
       showSummary: false,
       dataJson: null,
       tooltipVisible: false,
+      totalPrice: 0
     };
   },
   computed: {
     allQuestionsAnswered() {
       return (
-        this.selectedEquipment[1] &&
-        this.selectedEquipment[2] &&
-        this.selectedEquipment[3]
+        this.selectedAnswers[0].length > 0 &&
+        this.selectedAnswers[1].length > 0 &&
+        this.selectedAnswers[2].length > 0 &&
+        this.selectedAnswers[3].length > 0
       );
     },
-    selectedEquipmentString() {
-      return Object.values(this.selectedEquipment).join(' + ');
-    },
-    totalWorkHours() {
-      let totalHours = 0;
-      for (const sectionIndex in this.selectedEquipment) {
-        const itemId = this.selectedEquipment[sectionIndex];
-        const section = this.equipmentSections[sectionIndex];
-        const item = section.items.find((item) => item.id === itemId);
-        if (item) {
-          totalHours += this.calculateItemWorkHours(item);
+    selectedAnswersString() {
+      let values = []
+      Object.entries(this.selectedAnswers).forEach(equipment => {
+        if (equipment[1].length > 0) {
+          equipment[1].forEach(el => values.push(el))
         }
-      }
-      return totalHours;
+      })
+      return values.join(' + ');
     },
     missingQuestionsMessage() {
       const missingQuestions = [];
-      if (!this.selectedEquipment[1]) {
+      if (this.selectedAnswers[0].length === 0) {
+        missingQuestions.push('Question 1 - Choose number of building equipment');
+      }
+      if (this.selectedAnswers[1].length === 0) {
         missingQuestions.push('Question 2 - Choose number of building sites');
       }
-      if (!this.selectedEquipment[2]) {
+      if (this.selectedAnswers[2].length === 0) {
         missingQuestions.push('Question 3 - Choose speed of work');
       }
-      if (!this.selectedEquipment[3]) {
+      if (this.selectedAnswers[3].length === 0) {
         missingQuestions.push('Question 4 - Choose level of used materials');
       }
       return ` ${missingQuestions.join('\n')}.`;
@@ -121,44 +126,99 @@ export default {
       });
   },
   methods: {
-    selectEquipment(sectionIndex, itemName) {
-      this.selectedEquipment[sectionIndex] = itemName;
+    selectEquipment(sectionIndex, itemName, selectionType) {
+      if (selectionType === 'single') {
+        this.selectedAnswers[sectionIndex] = []
+        this.selectedAnswers[sectionIndex].push(itemName);
+      }
+      if (selectionType === 'multi') {
+        if (this.selectedAnswers[sectionIndex].includes(itemName)) {
+          const index = this.selectedAnswers[sectionIndex].indexOf(itemName)
+          this.selectedAnswers[sectionIndex].splice(index, 1)
+        } else {
+          this.selectedAnswers[sectionIndex].push(itemName)
+        }
+      }
     },
-
     calculateCost() {
-      if (this.allQuestionsAnswered) {
+        this.totalPrice = 0;
+
+        const multiplier = this.calculateMultipliers()
+        const multipliedBuildingDays = this.calculateMultipliedBuildingDays(multiplier)
+        const activeWorkingHours = multipliedBuildingDays * 8
+        const workdayPrice = this.getWorkdayPrice() 
+
+        this.totalPrice = activeWorkingHours * workdayPrice
+
         this.showSummary = true;
-        const dataJson = this.dataJson;
-        let totalPrice = 0;
-
-        for (const sectionIndex in this.selectedEquipment) {
-          const itemId = this.selectedEquipment[sectionIndex];
-          const section = dataJson.find((section) => section.type === 'sectionDefinition');
-          const item = section.items.find((item) => item.id === itemId);
-
-          if (item) {
-            totalPrice += item.operationsIfEnabled[0].number;
-          }
-        }
-
-        return totalPrice;
-      } else {
-        this.showSummary = false;
-        return 0;
-      }
     },
-
-    calculateItemWorkHours(item) {
-      let workHours = 0;
-      if (Array.isArray(item.operationsIfEnabled)) {
-        for (const operation of item.operationsIfEnabled) {
-          if (operation.type === 'add') {
-            workHours += operation.number;
-          }
-        }
+    calculateMultipliers() {
+      const buildingEquipment = this.selectedAnswers[0];
+      let excavatorCraneMultiplier = 0;
+      let rollerMultiplier = 0;
+      let speedMultiplier = 0;
+      if (buildingEquipment.includes('Excavator')) {
+        excavatorCraneMultiplier += 1
       }
-      return workHours;
+      if (buildingEquipment.includes('Crane')) {
+        excavatorCraneMultiplier += 1
+      }
+      if (buildingEquipment.includes('Excavator') && buildingEquipment.includes('Crane')) {
+        excavatorCraneMultiplier *= 1.2
+      }
+      if (buildingEquipment.includes('Roller')) {
+        rollerMultiplier += 0.9
+      }
+      const speedSectionDefinition = this.dataJson[1].items[2].items
+      speedMultiplier += 0
+      console.log(speedSectionDefinition.filter(el => {
+        if (el.name === this.selectedAnswers[2][0]) {
+          return el
+        }
+      })[0].operationsIfEnabled[0].number)
+
+      return excavatorCraneMultiplier + rollerMultiplier + speedMultiplier;
     },
+    calculateMultipliedBuildingDays(multiplier) {
+      const buildingSitesDefinition = this.dataJson[1].items[1].items
+      const materialsDefinition = this.dataJson[1].items[3].items
+      const additionalFacilitiesDefinition = this.dataJson[1].items[4].items
+      const buildingDays = this.calculateBuildingDays(buildingSitesDefinition, materialsDefinition, additionalFacilitiesDefinition)
+
+      return buildingDays * multiplier
+    },
+    calculateBuildingDays(buildingSites, materials, additionalFacilities) {
+      const buildingSiteDays = buildingSites.filter(el => {
+        if (el.name === this.selectedAnswers[1][0]) {
+          return el
+        }
+      })[0].operationsIfEnabled[0].number
+
+      const materialDays = materials.filter(el => {
+        if (el.name === this.selectedAnswers[3][0]) {
+          return el
+        }
+      })[0].operationsIfEnabled[0].number
+
+      let additionalFacilitiesDays = 0;
+
+      additionalFacilities.filter(el => {
+        if (this.selectedAnswers[4].includes(el.name)) {
+          return el
+        }
+      }).forEach(facility => {
+        additionalFacilitiesDays += facility.operationsIfEnabled[0].number
+      })
+
+      return buildingSiteDays + materialDays + additionalFacilitiesDays
+    },
+    getWorkdayPrice() {
+      return this.dataJson.filter(data => {
+          return data.type === 'valuesDefinition'
+        })[0].items.filter(item => {
+          return item.id === 'workday_price'
+        })[0].defaultValue
+    }
   },
 };
 </script>
@@ -210,6 +270,8 @@ export default {
 .equipment-image {
   width: 40px;
   height: 40px;
+  min-width: 40px;
+  min-height: 40px;
   border-radius: 50%;
   overflow: hidden;
   margin-right: 10px;
@@ -217,6 +279,7 @@ export default {
 
 
 .equipment-image img {
+
   width: 100%;
   height: 100%;
   object-fit: cover;
