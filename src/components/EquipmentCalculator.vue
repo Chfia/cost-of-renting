@@ -74,7 +74,8 @@ export default {
       showSummary: false,
       dataJson: null,
       tooltipVisible: false,
-      totalPrice: 0
+      totalPrice: 0,
+      
     };
   },
   computed: {
@@ -128,29 +129,32 @@ export default {
   methods: {
     selectEquipment(sectionIndex, itemName, selectionType) {
       if (selectionType === 'single') {
-        this.selectedAnswers[sectionIndex] = []
+      if (this.selectedAnswers[sectionIndex].includes(itemName)) {
+        const index = this.selectedAnswers[sectionIndex].indexOf(itemName);
+        this.selectedAnswers[sectionIndex].splice(index, 1);
+      } else {
+        this.selectedAnswers[sectionIndex] = [itemName];
+      }
+    } else if (selectionType === 'multi') {
+      if (this.selectedAnswers[sectionIndex].includes(itemName)) {
+        const index = this.selectedAnswers[sectionIndex].indexOf(itemName);
+        this.selectedAnswers[sectionIndex].splice(index, 1);
+      } else {
         this.selectedAnswers[sectionIndex].push(itemName);
       }
-      if (selectionType === 'multi') {
-        if (this.selectedAnswers[sectionIndex].includes(itemName)) {
-          const index = this.selectedAnswers[sectionIndex].indexOf(itemName)
-          this.selectedAnswers[sectionIndex].splice(index, 1)
-        } else {
-          this.selectedAnswers[sectionIndex].push(itemName)
-        }
       }
     },
     calculateCost() {
         this.totalPrice = 0;
 
-        const multiplier = this.calculateMultipliers()
-        const multipliedBuildingDays = this.calculateMultipliedBuildingDays(multiplier)
-        const activeWorkingHours = multipliedBuildingDays * 8
-        const workdayPrice = this.getWorkdayPrice() 
+        const multiplier = this.calculateMultipliers();
+      const multipliedBuildingDays = this.calculateMultipliedBuildingDays(multiplier);
+      const activeWorkingHours = multipliedBuildingDays * 8;
+      const workdayPrice = this.getWorkdayPrice();
 
-        this.totalPrice = activeWorkingHours * workdayPrice
-
-        this.showSummary = true;
+      this.totalPrice = activeWorkingHours * workdayPrice;
+      this.totalWorkHours = activeWorkingHours;
+      this.showSummary = true;
     },
     calculateMultipliers() {
       const buildingEquipment = this.selectedAnswers[0];
@@ -269,6 +273,8 @@ export default {
 .equipment-image {
   width: 40px;
   height: 40px;
+  min-width: 40px;
+  min-height: 40px;
   border-radius: 50%;
   overflow: hidden;
   margin-right: 10px;
@@ -291,8 +297,9 @@ export default {
   background-color: #f44336;
   padding: 10px;
   margin-bottom: 10px;
+  border-radius: 5px;
   color: white;
-  padding: 50px;
+  padding: 12%;
   z-index: 1;
 }
 
@@ -330,11 +337,24 @@ export default {
 
 @media (min-width: 768px) {
 
+  .question {
+  padding: 10px;
+  margin: 5px 12%;
+  z-index: 1;
+}
+
   .equipment {
     display: inline-block;
 
   }
+  .question:not(:last-child) .equipment:nth-child(2) {
+  margin: 0 20%;
+}
 
+.summary {
+  margin: 0 12%;
+  border-radius: 5px;
+}
   .equipment-button {
     display: none;
     cursor: pointer;
