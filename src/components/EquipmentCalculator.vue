@@ -41,7 +41,6 @@
       <div v-if="sectionIndex < equipmentSections.length - 1" class="question-divider"></div>
     </div>
     <div>
-      <button @click="calculateCost()" :disabled="!allQuestionsAnswered">Oblicz koszt</button>
       <div class="summary">
         <p class="summary_name">{{ selectedAnswersString }}</p>
         <p class="missing-questions" v-if="!allQuestionsAnswered"
@@ -55,12 +54,17 @@
 </template>
 
 
-
 <script>
 import axios from 'axios';
 
 export default {
   name: 'EquipmentCalculator',
+  watch: {
+    selectedAnswers: {
+      handler: 'calculateCost',
+      deep: true,
+    },
+  },
   data() {
     return {
       equipmentSections: [],
@@ -75,7 +79,7 @@ export default {
       dataJson: null,
       tooltipVisible: false,
       totalPrice: 0,
-      
+      totalWorkHours: 0, // Dodane pole na totalWorkHours
     };
   },
   computed: {
@@ -88,27 +92,27 @@ export default {
       );
     },
     selectedAnswersString() {
-      let values = []
-      Object.entries(this.selectedAnswers).forEach(equipment => {
+      let values = [];
+      Object.entries(this.selectedAnswers).forEach((equipment) => {
         if (equipment[1].length > 0) {
-          equipment[1].forEach(el => values.push(el))
+          equipment[1].forEach((el) => values.push(el));
         }
-      })
+      });
       return values.join(' + ');
     },
     missingQuestionsMessage() {
       const missingQuestions = [];
       if (this.selectedAnswers[0].length === 0) {
-        missingQuestions.push('Question 1 - Choose number of building equipment');
+        missingQuestions.push('Question 1 - Choose the number of building equipment');
       }
       if (this.selectedAnswers[1].length === 0) {
-        missingQuestions.push('Question 2 - Choose number of building sites');
+        missingQuestions.push('Question 2 - Choose the number of building sites');
       }
       if (this.selectedAnswers[2].length === 0) {
-        missingQuestions.push('Question 3 - Choose speed of work');
+        missingQuestions.push('Question 3 - Choose the speed of work');
       }
       if (this.selectedAnswers[3].length === 0) {
-        missingQuestions.push('Question 4 - Choose level of used materials');
+        missingQuestions.push('Question 4 - Choose the level of used materials');
       }
       return ` ${missingQuestions.join('\n')}.`;
     },
@@ -129,25 +133,25 @@ export default {
   methods: {
     selectEquipment(sectionIndex, itemName, selectionType) {
       if (selectionType === 'single') {
-      if (this.selectedAnswers[sectionIndex].includes(itemName)) {
-        const index = this.selectedAnswers[sectionIndex].indexOf(itemName);
-        this.selectedAnswers[sectionIndex].splice(index, 1);
-      } else {
-        this.selectedAnswers[sectionIndex] = [itemName];
-      }
-    } else if (selectionType === 'multi') {
-      if (this.selectedAnswers[sectionIndex].includes(itemName)) {
-        const index = this.selectedAnswers[sectionIndex].indexOf(itemName);
-        this.selectedAnswers[sectionIndex].splice(index, 1);
-      } else {
-        this.selectedAnswers[sectionIndex].push(itemName);
-      }
+        if (this.selectedAnswers[sectionIndex].includes(itemName)) {
+          const index = this.selectedAnswers[sectionIndex].indexOf(itemName);
+          this.selectedAnswers[sectionIndex].splice(index, 1);
+        } else {
+          this.selectedAnswers[sectionIndex] = [itemName];
+        }
+      } else if (selectionType === 'multi') {
+        if (this.selectedAnswers[sectionIndex].includes(itemName)) {
+          const index = this.selectedAnswers[sectionIndex].indexOf(itemName);
+          this.selectedAnswers[sectionIndex].splice(index, 1);
+        } else {
+          this.selectedAnswers[sectionIndex].push(itemName);
+        }
       }
     },
     calculateCost() {
-        this.totalPrice = 0;
+      this.totalPrice = 0;
 
-        const multiplier = this.calculateMultipliers();
+      const multiplier = this.calculateMultipliers();
       const multipliedBuildingDays = this.calculateMultipliedBuildingDays(multiplier);
       const activeWorkingHours = multipliedBuildingDays * 8;
       const workdayPrice = this.getWorkdayPrice();
@@ -162,69 +166,73 @@ export default {
       let rollerMultiplier = 0;
       let speedMultiplier = 0;
       if (buildingEquipment.includes('Excavator')) {
-        excavatorCraneMultiplier += 1
+        excavatorCraneMultiplier += 1;
       }
       if (buildingEquipment.includes('Crane')) {
-        excavatorCraneMultiplier += 1
+        excavatorCraneMultiplier += 1;
       }
       if (buildingEquipment.includes('Excavator') && buildingEquipment.includes('Crane')) {
-        excavatorCraneMultiplier *= 1.2
+        excavatorCraneMultiplier *= 1.2;
       }
-      if (buildingEquipment.includes('Roller')) {
-        rollerMultiplier += 0.9
-      }
-      const speedSectionDefinition = this.dataJson[1].items[2].items
-      speedMultiplier += speedSectionDefinition.filter(el => {
-        if (el.name === this.selectedAnswers[2][0]) {
-          return el
+      if (this.dataJson && this.selectedAnswers[2][0]) {
+        const speedSectionDefinition = this.dataJson[1].items[2].items;
+        const selectedSpeed = speedSectionDefinition.find((el) => el.name === this.selectedAnswers[2][0]);
+        if (selectedSpeed && selectedSpeed.operationsIfEnabled && selectedSpeed.operationsIfEnabled[0]) {
+          speedMultiplier += selectedSpeed.operationsIfEnabled[0].number;
         }
-      })[0].operationsIfEnabled[0].number
+      }
 
       return excavatorCraneMultiplier + rollerMultiplier + speedMultiplier;
     },
     calculateMultipliedBuildingDays(multiplier) {
-      const buildingSitesDefinition = this.dataJson[1].items[1].items
-      const materialsDefinition = this.dataJson[1].items[3].items
-      const additionalFacilitiesDefinition = this.dataJson[1].items[4].items
-      const buildingDays = this.calculateBuildingDays(buildingSitesDefinition, materialsDefinition, additionalFacilitiesDefinition)
+      const buildingSitesDefinition = this.dataJson[1].items[1].items;
+      const materialsDefinition = this.dataJson[1].items[3].items;
+      const additionalFacilitiesDefinition = this.dataJson[1].items[4].items;
+      const buildingDays = this.calculateBuildingDays(buildingSitesDefinition, materialsDefinition, additionalFacilitiesDefinition);
 
-      return buildingDays * multiplier
+      return buildingDays * multiplier;
     },
     calculateBuildingDays(buildingSites, materials, additionalFacilities) {
-      const buildingSiteDays = buildingSites.filter(el => {
-        if (el.name === this.selectedAnswers[1][0]) {
-          return el
-        }
-      })[0].operationsIfEnabled[0].number
+      let buildingSiteDays = 0;
+      let materialDays = 0;
 
-      const materialDays = materials.filter(el => {
-        if (el.name === this.selectedAnswers[3][0]) {
-          return el
+      if (this.selectedAnswers[1][0]) {
+        const selectedBuildingSite = buildingSites.find((el) => el.name === this.selectedAnswers[1][0]);
+        if (selectedBuildingSite && selectedBuildingSite.operationsIfEnabled && selectedBuildingSite.operationsIfEnabled[0]) {
+          buildingSiteDays = selectedBuildingSite.operationsIfEnabled[0].number;
         }
-      })[0].operationsIfEnabled[0].number
+      }
+
+      if (this.selectedAnswers[3][0]) {
+        const selectedMaterial = materials.find((el) => el.name === this.selectedAnswers[3][0]);
+        if (selectedMaterial && selectedMaterial.operationsIfEnabled && selectedMaterial.operationsIfEnabled[0]) {
+          materialDays = selectedMaterial.operationsIfEnabled[0].number;
+        }
+      }
 
       let additionalFacilitiesDays = 0;
 
-      additionalFacilities.filter(el => {
+      additionalFacilities.filter((el) => {
         if (this.selectedAnswers[4].includes(el.name)) {
-          return el
+          return el;
         }
-      }).forEach(facility => {
-        additionalFacilitiesDays += facility.operationsIfEnabled[0].number
-      })
+      }).forEach((facility) => {
+        additionalFacilitiesDays += facility.operationsIfEnabled[0].number;
+      });
 
-      return buildingSiteDays + materialDays + additionalFacilitiesDays
+      return buildingSiteDays + materialDays + additionalFacilitiesDays;
     },
     getWorkdayPrice() {
-      return this.dataJson.filter(data => {
-          return data.type === 'valuesDefinition'
-        })[0].items.filter(item => {
-          return item.id === 'workday_price'
-        })[0].defaultValue
-    }
+      return this.dataJson.filter((data) => {
+        return data.type === 'valuesDefinition';
+      })[0].items.filter((item) => {
+        return item.id === 'workday_price';
+      })[0].defaultValue;
+    },
   },
 };
 </script>
+
 
 
 
