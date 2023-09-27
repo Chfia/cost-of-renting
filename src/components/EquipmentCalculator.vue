@@ -79,7 +79,7 @@ export default {
       dataJson: null,
       tooltipVisible: false,
       totalPrice: 0,
-      totalWorkHours: 0, // Dodane pole na totalWorkHours
+      totalWorkHours: 0,
     };
   },
   computed: {
@@ -101,21 +101,23 @@ export default {
       return values.join(' + ');
     },
     missingQuestionsMessage() {
-      const missingQuestions = [];
-      if (this.selectedAnswers[0].length === 0) {
-        missingQuestions.push('Question 1 - Choose the number of building equipment');
-      }
-      if (this.selectedAnswers[1].length === 0) {
-        missingQuestions.push('Question 2 - Choose the number of building sites');
-      }
-      if (this.selectedAnswers[2].length === 0) {
-        missingQuestions.push('Question 3 - Choose the speed of work');
-      }
-      if (this.selectedAnswers[3].length === 0) {
-        missingQuestions.push('Question 4 - Choose the level of used materials');
-      }
-      return ` ${missingQuestions.join('\n')}.`;
-    },
+  const missingQuestions = [];
+  const questions = [
+    'Choose the number of building equipment',
+    'Choose the number of building sites',
+    'Choose the speed of work',
+    'Choose the level of used materials'
+  ];
+
+  for (let i = 0; i < questions.length; i++) {
+    if (this.selectedAnswers[i].length === 0) {
+      missingQuestions.push(`Question ${i + 1} - ${questions[i]}`);
+    }
+  }
+
+  return `${missingQuestions.join('\n')}.`;
+}
+   
   },
   mounted() {
     axios
@@ -266,17 +268,16 @@ export default {
   background-color: #a4eba6;
 }
 
-.equipment-button.selected .equipment-option {
-  /* to do */
-}
-
 .equipment-option {
   display: flex;
   align-items: center;
   padding: 15px 20px;
   transition: background-color 0.3s;
-}
 
+ }
+ .equipment-description {
+  text-align: left;
+} 
 
 .equipment-image {
   width: 40px;
